@@ -23,7 +23,7 @@ def _e1e2(navlon,navlat):
     return e1,e2
 
 #########################
-def interpolate(data,navlon,navlat,interp=None):
+def interpolate(data,navlon,navlat,interp=None,isLL=True):
     """
         Perform a spatial interpolation if required; return x_reg,y_reg,data_reg.
         data : raw data
@@ -32,9 +32,14 @@ def interpolate(data,navlon,navlat,interp=None):
         interp : if None return data with cordinates in meters, if 'basemap', return interpolated
         data using basemap from mpl_toolkits and also cordinates in meters.
         """
-    e1,e2 = _e1e2(navlon,navlat)
-    x1d_in = e1[0,:].cumsum() - e1[0,0]
-    y1d_in = e2[:,0].cumsum() - e2[0,0]
+    if isLL:
+        e1,e2 = _e1e2(navlon,navlat)
+        x1d_in = e1[0,:].cumsum() - e1[0,0]
+        y1d_in = e2[:,0].cumsum() - e2[0,0]
+    else:
+        # coordinates are already x,y
+        x1d_in,y1d_in = navlon,navlat
+    
     x2d_in,y2d_in = np.meshgrid(x1d_in,y1d_in)
     # print x1d_in
     if interp is None :
@@ -187,8 +192,8 @@ def _apply_windowing(data,window):
     else: raise ValueError('Your choice of windowing is not available in this sript.')
 
 #########################
-def preprocess_data(data,detrend,window,navlon,navlat):
-    x,y,data = interpolate(data,navlon,navlat)  # get x and y cordinates
+def preprocess_data(data,detrend,window,navlon,navlat,isLL=True):
+    x,y,data = interpolate(data,navlon,navlat,isLL)  # get x and y coodinates
     data = isdata_contain_nan(data)             # check if data contains NaN value
     data = _detrend_data(x,y,data,detrend)      # Detrend
     data = _apply_windowing(data,window)        # Apply windowing
@@ -215,7 +220,7 @@ def _get_grad_uv_in_fourier_space(u,v,kx,ky,Ni,Nj):
     return dudx,dudy,dvdx,dvdy
 
 #########################
-def wavenumber_spectra(data,navlon,navlat,window='Tukey',detrend='Both'):
+def wavenumber_spectra(data,navlon,navlat,window='Tukey',detrend='Both',isLL=True):
     """ This function computes wavenumber spectral density of a two dimensional dataset.
         
         Input
@@ -234,7 +239,7 @@ def wavenumber_spectra(data,navlon,navlat,window='Tukey',detrend='Both'):
             psd : isotropic power spectral density
         """
     Nj,Ni = data.shape                                                      # Get data shape
-    data,x,y = preprocess_data(data,detrend,window,navlon,navlat)           # Remove NaN, Detrend, apply windowing
+    data,x,y = preprocess_data(data,detrend,window,navlon,navlat,isLL)           # Remove NaN, Detrend, apply windowing
     wavenumber,wavenumber_2D,kx,ky,dx,dy = _wavenumber_vector(x,y,Ni,Nj)    # Get wavenumber
     spec_2D = _get_2D_psd(data,dx,dy,Ni,Nj)                                 # Estimate 2D spectra
     psd = _get_1D_psd(wavenumber_2D,wavenumber,spec_2D) # Average 2D spectra to 1D spectra : isotropic wavenumber spectra density
@@ -242,7 +247,7 @@ def wavenumber_spectra(data,navlon,navlat,window='Tukey',detrend='Both'):
 
 
 #########################
-def spectra_flux(_u,_v,navlon,navlat,window='Tukey',detrend='Both'):
+def spectra_flux(_u,_v,navlon,navlat,window='Tukey',detrend='Both',isLL=True):
     '''This fuctions implement the computation of kinetic energy spectral flux.
         flux = \int^{ks}_{k} u ....
         
@@ -262,9 +267,9 @@ def spectra_flux(_u,_v,navlon,navlat,window='Tukey',detrend='Both'):
             wavenumber : Horizontal wavenumber
             flux : kinetic energy spectral flux
         '''
-    Nj,Ni = _u.shape                                             # Get data shape
-    u,x,y = preprocess_data(_u,detrend,window,navlon,navlat)     # Remove NaN, Detrend, apply windowing
-    v,x,y = preprocess_data(_v,detrend,window,navlon,navlat)     # Remove NaN, Detrend, apply windowing
+    Nj,Ni = _u.shape                                              # Get data shape
+    u,x,y = preprocess_data(_u,detrend,window,navlon,navlat,isLL) # Remove NaN, Detrend, apply windowing
+    v,x,y = preprocess_data(_v,detrend,window,navlon,navlat,isLL) # Remove NaN, Detrend, apply windowing
     wavenumber,wavenumber_2D,kx,ky,dx,dy = _wavenumber_vector(x,y,Ni,Nj)
     dudx,dudy,dvdx,dvdy = _get_grad_uv_in_fourier_space(u,v,kx,ky,Ni,Nj) # Get gradient of u and v
     # - compute terms
@@ -280,7 +285,7 @@ def spectra_flux(_u,_v,navlon,navlat,window='Tukey',detrend='Both'):
     return wavenumber,flux
 
 
-def cross_spectra(data1,data2,navlon,navlat,window='Tukey',detrend='Both',Normalize=True):
+def cross_spectra(data1,data2,navlon,navlat,window='Tukey',detrend='Both',Normalize=True,isLL=True):
     '''This fuctions compute the spectra coherence between two 2D datasets
         
         Input
@@ -299,9 +304,9 @@ def cross_spectra(data1,data2,navlon,navlat,window='Tukey',detrend='Both',Normal
             wavenumber : Horizontal wavenumber
             cross spectra : spectra coherence between data1 and data2
         '''
-    Nj,Ni = data1.shape                                                 # Get data shape
-    data1,x,y = preprocess_data(data1,detrend,window,navlon,navlat)     # Remove NaN, Detrend, apply windowing
-    data2,x,y = preprocess_data(data2,detrend,window,navlon,navlat)     # Remove NaN, Detrend, apply windowing
+    Nj,Ni = data1.shape                                                  # Get data shape
+    data1,x,y = preprocess_data(data1,detrend,window,navlon,navlat,isLL) # Remove NaN, Detrend, apply windowing
+    data2,x,y = preprocess_data(data2,detrend,window,navlon,navlat,isLL) # Remove NaN, Detrend, apply windowing
     wavenumber,wavenumber_2D,kx,ky,dx,dy = _wavenumber_vector(x,y,Ni,Nj)        # wavenumber vector
     spec_2D = (np.fft.fft2(data1) * np.fft.fft2(data2).conj()).real*(dx*dy)/(Ni*Nj) # Cross spectra
     
